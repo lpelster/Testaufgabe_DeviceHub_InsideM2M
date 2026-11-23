@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>DeviceHub</title>
+    <link rel="stylesheet" href="/css/devices.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h1>DeviceHub</h1>
+    <p class="subtitle">Übersicht aller registrierten Geräte</p>
+
+    <table>
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Letzter Messwert</th>
+            <th>Zeitstempel</th>
+            <th>Intervall (Sekunden)</th>
+            <th>Aktion</th>
+        </tr>
+        </thead>
+
+        <tbody id="device-list">
+        {#for device in devices}
+            <tr class="device-row"
+                id="device-{device.id}"
+                data-device-id="{device.id}">
+
+                <td class="device-name">{device.name}</td>
+
+                <td>
+                    {#if device.stateDevice.name() eq 'ONLINE'}
+                        <span class="status online" id="status-{device.id}">Online</span>
+                    {#else}
+                        <span class="status offline" id="status-{device.id}">Offline</span>
+                    {/if}
+                </td>
+
+                <td>
+                    <span id="measurement-{device.id}">
+                        {#if device.latestMeasurement}
+                            {device.latestMeasurement.value}
+                            {device.latestMeasurement.unit}
+                        {#else}
+                            Kein Messwert
+                        {/if}
+                    </span>
+                </td>
+
+                <td>
+                    <span id="timestamp-{device.id}">
+                        {#if device.latestMeasurement}
+                            {device.latestMeasurement.timestamp}
+                        {#else}
+                            -
+                        {/if}
+                    </span>
+                </td>
+
+                <td>
+                    <input type="number"
+                           id="interval-{device.id}"
+                           value="{device.intervalSeconds}"
+                           min="1">
+                </td>
+
+                <td>
+                    <button onclick="updateInterval('{device.id}')">
+                        Ändern
+                    </button>
+                </td>
+            </tr>
+        {/for}
+        </tbody>
+    </table>
+
+</div>
+
+<script>
+    const REFRESH_MS = 2000;
+
+    async function updateInterval(deviceId) {
+        const seconds = document.getElementById("interval-" + deviceId).value;
+
+        const response = await fetch(
+            "/view/devices/" + deviceId + "/interval?seconds=" + seconds,
+            { method: "PUT" }
+        );
+
+        if (response.ok) {
+            alert("Intervall wurde geändert.");
+        } else {
+            alert("Fehler beim Ändern des Intervalls.");
+        }
+    }
+
+    async function refreshList() {
+        try {
+            const response = await fetch("/view/devices");
+            if (!response.ok) {
+                return;
+            }
+
+            const html = await response.text();
+            const doc = new DOMParser().parseFromString(html, "text/html");
+            const list = document.getElementById("device-list");
+
+            doc.querySelectorAll("#device-list tr.device-row").forEach(function (newRow) {
+                const id = newRow.dataset.deviceId;
+                const oldRow = document.getElementById("device-" + id);
+
+                // Neues Gerät: Zeile einfach anhängen
+                if (!oldRow) {
+                    list.appendChild(newRow);
+                    return;
+                }
+
+                // Status
+                const oldStatus = oldRow.querySelector("#status-" + id);
+                const newStatus = newRow.querySelector("#status-" + id);
+                if (oldStatus && newStatus) {
+                    oldStatus.className = newStatus.className;
+                    oldStatus.textContent = newStatus.textContent;
+                }
+
+                // Letzter Messwert
+                const oldMeasurement = oldRow.querySelector("#measurement-" + id);
+                const newMeasurement = newRow.querySelector("#measurement-" + id);
+                if (oldMeasurement && newMeasurement) {
+                    oldMeasurement.textContent = newMeasurement.textContent.trim();
+                }
+
+                // Zeitstempel
+                const oldTimestamp = oldRow.querySelector("#timestamp-" + id);
+                const newTimestamp = newRow.querySelector("#timestamp-" + id);
+
+                if (oldTimestamp && newTimestamp) {
+                    oldTimestamp.textContent = newTimestamp.textContent.trim();
+                }
+
+                // Intervall nur aktualisieren, wenn gerade nicht darin getippt wird
+                const oldInput = oldRow.querySelector("#interval-" + id);
+                const newInput = newRow.querySelector("#interval-" + id);
+                if (oldInput && newInput && document.activeElement !== oldInput) {
+                    oldInput.value = newInput.value;
+                }
+            });
+
+        } catch (e) {
+            console.error("Aktualisierung fehlgeschlagen", e);
+        }
+    }
+
+    setInterval(refreshList, REFRESH_MS);
+</script>
+
+</body>
+</html>
